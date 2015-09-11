@@ -607,7 +607,6 @@ class Update(Base):
 
     # Flags
     locked = Column(Boolean, default=False)
-    pushed = Column(Boolean, default=False)
     critpath = Column(Boolean, default=False)
 
     # Bug settings
@@ -1658,6 +1657,10 @@ class Update(Base):
     @property
     def requirements_json(self):
         return json.dumps(list(tokenize(self.requirements or '')))
+
+    @property
+    def pushed(self):
+        return bool(self.date_testing or self.date_stable)
 
     @property
     def last_modified(self):
