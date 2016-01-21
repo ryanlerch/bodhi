@@ -25,6 +25,7 @@ from bodhi.models import Update, Build, Bug, CVE, Package, UpdateRequest, Releas
 import bodhi.schemas
 import bodhi.security
 import bodhi.services.errors
+import bodhi.util
 from bodhi.validators import (
     validate_nvrs,
     validate_uniqueness,
@@ -92,7 +93,7 @@ def get_update_for_editing(request):
     return dict(
         update=request.validated['update'],
         types=reversed(bodhi.models.UpdateType.values()),
-        severities=reversed(bodhi.models.UpdateSeverity.values()),
+        severities=sorted(bodhi.models.UpdateSeverity.values(), key=bodhi.util.sort_severity),
         suggestions=reversed(bodhi.models.UpdateSuggestion.values()),
     )
 
@@ -213,6 +214,10 @@ def query_updates(request):
         query = query.join(Update.builds).join(Build.package)
         query = query.filter(or_(*[Package.name==pkg for pkg in packages]))
 
+    package = None
+    if packages and len(packages):
+        package = packages[0]
+
     builds = data.get('builds')
     if builds is not None:
         query = query.join(Update.builds)
@@ -302,6 +307,7 @@ def query_updates(request):
         chrome=data.get('chrome'),
         display_user=data.get('display_user', False),
         display_request=data.get('display_request', True),
+        package=package,
     )
 
 
