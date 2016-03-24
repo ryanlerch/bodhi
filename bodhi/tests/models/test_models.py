@@ -145,6 +145,10 @@ class TestBuild(ModelTest):
         eq_(len(self.obj.package.builds), 1)
         eq_(self.obj.package.builds[0], self.obj)
 
+    def test_epoch(self):
+        self.obj.epoch = '1'
+        eq_(self.obj.evr, ("1", "1.0.8", "3.fc11"))
+
     #def test_latest(self):
     #    # Note, this build is hardcoded in bodhi/buildsys.py:DevBuildsys
     #    eq_(self.obj.get_latest(), u"TurboGears-1.0.8-7.fc11")
@@ -195,6 +199,7 @@ class TestUpdate(ModelTest):
 
     def get_update(self, name=u'TurboGears-1.0.8-3.fc11'):
         attrs = self.attrs.copy()
+        attrs['title'] = name
         pkg = self.db.query(model.Package) \
                 .filter_by(name=u'TurboGears').one()
         rel = self.db.query(model.Release) \
@@ -218,7 +223,9 @@ class TestUpdate(ModelTest):
         koji = buildsys.get_session()
         koji.clear()
         koji.__tagged__[b.nvr] = [release.testing_tag,
-                                  release.pending_testing_tag]
+                                  release.pending_testing_tag,
+                                  # Add an unknown tag that we shouldn't touch
+                                  release.dist_tag + '-compose']
         self.obj.builds[0].unpush(koji)
         eq_(koji.__moved__, [(u'dist-f11-updates-testing', u'dist-f11-updates-candidate', u'TurboGears-1.0.8-3.fc11')])
         eq_(koji.__untag__, [(u'dist-f11-updates-testing-pending', u'TurboGears-1.0.8-3.fc11')])

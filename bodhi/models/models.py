@@ -489,12 +489,25 @@ class Build(Base):
     __get_by__ = ('nvr',)
 
     nvr = Column(Unicode(100), unique=True, nullable=False)
+    epoch = Column(Integer, default=0)
     inherited = Column(Boolean, default=False)
     package_id = Column(Integer, ForeignKey('packages.id'))
     release_id = Column(Integer, ForeignKey('releases.id'))
     update_id = Column(Integer, ForeignKey('updates.id'))
 
     release = relationship('Release', backref='builds', lazy=False)
+
+    @property
+    def evr(self):
+        if self.epoch:
+            name, version, release = get_nvr(self.nvr)
+            return (str(self.epoch), version, release)
+        else:
+            koji_session = buildsys.get_session()
+            build = koji_session.getBuild(self.nvr)
+            evr = build_evr(build)
+            self.epoch = int(evr[0])
+            return evr
 
     def get_latest(self):
         koji_session = buildsys.get_session()
@@ -507,7 +520,7 @@ class Build(Base):
         # packages that never make their way over stable, so we don't want to
         # generate ChangeLogs against those.
         latest = None
-        evr = build_evr(koji_session.getBuild(self.nvr))
+        evr = self.evr
         for tag in [self.update.release.stable_tag, self.update.release.dist_tag]:
             builds = koji_session.getLatestBuilds(
                     tag, package=self.package.name)
@@ -589,7 +602,7 @@ class Update(Base):
     __include_extras__ = ('meets_testing_requirements', 'url',)
     __get_by__ = ('title', 'alias')
 
-    title = Column(UnicodeText, default=None, index=True)
+    title = Column(UnicodeText, unique=True, default=None, index=True)
 
     karma = Column(Integer, default=0)
     stable_karma = Column(Integer, nullable=True)
@@ -820,7 +833,7 @@ class Update(Base):
 
             # Remove all koji tags and change the status back to pending
             if not up.status is UpdateStatus.pending:
-                up.unpush()
+                up.unpush(db)
                 caveats.append({
                     'name': 'status',
                     'description': 'Builds changed.  Your update is being '
@@ -1030,7 +1043,7 @@ class Update(Base):
 
         topic = u'update.request.%s' % action
         if action is UpdateRequest.unpush:
-            self.unpush()
+            self.unpush(db)
             self.comment(db, u'This update has been unpushed.', author=username)
             notifications.publish(topic=topic, msg=dict(
                 update=self, agent=username))
@@ -1042,6 +1055,29 @@ class Update(Base):
             notifications.publish(topic=topic, msg=dict(
                 update=self, agent=username))
             return
+
+        # If status is pending going to testing request and action is revoke,
+        # set the status to unpushed
+        elif self.status is UpdateStatus.pending and self.request is UpdateRequest.testing \
+                and action is UpdateRequest.revoke:
+            self.status = UpdateStatus.unpushed
+            self.revoke()
+            flash_log("%s has been revoked." % self.title)
+            notifications.publish(topic=topic, msg=dict(
+                update=self, agent=username))
+            return
+
+        # If status is testing going to stable request and action is revoke,
+        # keep the status at testing
+        elif self.status is UpdateStatus.testing and self.request is UpdateRequest.stable \
+                and action is UpdateRequest.revoke:
+            self.status = UpdateStatus.testing
+            self.revoke()
+            flash_log("%s has been revoked." % self.title)
+            notifications.publish(topic=topic, msg=dict(
+                update=self, agent=username))
+            return
+
         elif action is UpdateRequest.revoke:
             self.revoke()
             flash_log("%s has been revoked." % self.title)
@@ -1491,7 +1527,7 @@ class Update(Base):
         mail.send(people, 'comment', self, sender=None, agent=author)
         return comment, caveats
 
-    def unpush(self):
+    def unpush(self, db):
         """ Move this update back to its dist-fX-updates-candidate tag """
         log.debug("Unpushing %s" % self.title)
         koji = buildsys.get_session()
@@ -1504,13 +1540,14 @@ class Update(Base):
             raise BodhiException("Can't unpush a %s update"
                                  % self.status.description)
 
-        self.untag()
+        self.untag(db)
 
         for build in self.builds:
             koji.tagBuild(self.release.candidate_tag, build.nvr, force=True)
 
         self.pushed = False
         self.status = UpdateStatus.unpushed
+        self.request = None
 
     def revoke(self):
         """ Remove pending request for this update """
@@ -1535,13 +1572,18 @@ class Update(Base):
 
         self.request = None
 
-    def untag(self):
+    def untag(self, db):
         """ Untag all of the builds in this update """
         log.info("Untagging %s" % self.title)
         koji = buildsys.get_session()
+        tag_types, tag_rels = Release.get_tags(db)
         for build in self.builds:
             for tag in build.get_tags():
-                koji.untagBuild(tag, build.nvr, force=True)
+                # Only remove tags that we know about
+                if tag in tag_rels:
+                    koji.untagBuild(tag, build.nvr, force=True)
+                else:
+                    log.info("Skipping tag that we don't know about: %s" % tag)
         self.pushed = False
 
     def obsolete(self, db, newer=None):
@@ -1551,7 +1593,7 @@ class Update(Base):
         mash takes place.
         """
         log.debug("Obsoleting %s" % self.title)
-        self.untag()
+        self.untag(db)
         self.status = UpdateStatus.obsolete
         self.request = None
         if newer:
@@ -1732,6 +1774,14 @@ class Update(Base):
                'maintainer wishes' in comment.text:
                 return True
         return False
+
+    @property
+    def days_to_stable(self):
+        """ Return the number of days until an update can be pushed to stable """
+        if self.meets_testing_requirements:
+            return self.release.mandatory_days_in_testing - (datetime.utcnow() - self.date_testing).days
+        else:
+            return 0
 
     @property
     def days_in_testing(self):

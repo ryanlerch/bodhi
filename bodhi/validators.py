@@ -96,6 +96,16 @@ def validate_builds(request):
             if up.status is UpdateStatus.stable:
                 request.errors.add('body', 'builds',
                                    'Cannot edit stable updates')
+
+        for nvr in request.validated.get('builds', []):
+            # If the build is new
+            if nvr not in edited:
+                # Ensure it doesn't already exist
+                build = request.db.query(Build).filter_by(nvr=nvr).first()
+                if build and build.update is not None:
+                    request.errors.add('body', 'builds',
+                                       "Update for {} already exists".format(nvr))
+
         return
 
     for nvr in request.validated.get('builds', []):
@@ -954,10 +964,10 @@ def validate_request(request):
 
             log.info('Checking against %s' % other_build.nvr)
 
-            if rpm.labelCompare(get_nvr(other_build.nvr), nvr) > 0:
-                log.debug('%s is older than %s', build.nvr, other_build.nvr)
+            if rpm.labelCompare(other_build.evr, build.evr) > 0:
+                log.debug('%s is older than %s', build.evr, other_build.evr)
                 request.errors.add('querystring', 'update',
-                        'Cannot submit %s to %s since it is older than %s' %
-                        (build.nvr, target.description, other_build.nvr))
+                        'Cannot submit %s %s to %s since it is older than %s' %
+                        (build.package.name, build.evr, target.description, other_build.evr))
                 request.errors.status = HTTPBadRequest.code
                 return

@@ -276,7 +276,7 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
         app = TestApp(main({}, testing=u'ralph', session=self.db, **self.app_settings))
         post_data = dict(update=nvr, request='stable',
                          csrf_token=app.get('/csrf').json_body['csrf_token'])
-        res = app.post_json('/updates/%s/request' % nvr, post_data, status=400)
+        res = app.post_json('/updates/%s/request' % str(nvr), post_data, status=400)
 
         # Ensure we can't push it until it meets the requirements
         eq_(res.json_body['status'], 'error')
@@ -312,7 +312,7 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
 
         # Try and submit the update to stable as a proventester
         app = TestApp(main({}, testing=u'bob', session=self.db, **self.app_settings))
-        res = app.post_json('/updates/%s/request' % nvr,
+        res = app.post_json('/updates/%s/request' % str(nvr),
                             dict(update=nvr, request='stable',
                                 csrf_token=app.get('/csrf').json_body['csrf_token']),
                             status=200)
@@ -320,7 +320,7 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
         eq_(res.json_body['update']['request'], 'stable')
 
         app = TestApp(main({}, testing=u'bob', session=self.db, **self.app_settings))
-        res = app.post_json('/updates/%s/request' % nvr,
+        res = app.post_json('/updates/%s/request' % str(nvr),
                             dict(update=nvr, request='obsolete',
                                  csrf_token=app.get('/csrf').json_body['csrf_token']),
                             status=200)
@@ -331,18 +331,18 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
 
         # Test that bob has can_edit True, provenpackager
         app = TestApp(main({}, testing=u'bob', session=self.db, **self.app_settings))
-        res = app.get('/updates/%s' % nvr, status=200)
+        res = app.get('/updates/%s' % str(nvr), status=200)
         eq_(res.json_body['can_edit'], True)
 
         # Test that ralph has can_edit True, they submitted it.
         app = TestApp(main({}, testing=u'ralph', session=self.db, **self.app_settings))
-        res = app.get('/updates/%s' % nvr, status=200)
+        res = app.get('/updates/%s' % str(nvr), status=200)
         eq_(res.json_body['can_edit'], True)
 
         # Test that someuser has can_edit False, they are unrelated
         # This check *failed* with the old acls code.
         app = TestApp(main({}, testing=u'someuser', session=self.db, **self.app_settings))
-        res = app.get('/updates/%s' % nvr, status=200)
+        res = app.get('/updates/%s' % str(nvr), status=200)
         eq_(res.json_body['can_edit'], False)
 
         # Test that an anonymous user has can_edit False, obv.
@@ -354,7 +354,7 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
         })
 
         app = TestApp(main({}, session=self.db, **anonymous_settings))
-        res = app.get('/updates/%s' % nvr, status=200)
+        res = app.get('/updates/%s' % str(nvr), status=200)
         eq_(res.json_body['can_edit'], False)
 
     @mock.patch(**mock_valid_requirements)
@@ -1869,6 +1869,72 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
 
     @mock.patch(**mock_taskotron_results)
     @mock.patch(**mock_valid_requirements)
+    @mock.patch('bodhi.notifications.publish')
+    def test_revoke_action_for_stable_request(self, publish, *args):
+        """
+        Test revoke action for stable request on testing update
+        and check status after revoking the request
+        """
+        args = self.get_update('bodhi-2.0.0-3.fc17')
+        resp = self.app.post_json('/updates/', args)
+        up = self.db.query(Update).filter_by(title=resp.json['title']).one()
+        up.status = UpdateStatus.testing
+        up.request = UpdateRequest.stable
+        self.db.flush()
+
+        resp = self.app.post_json(
+            '/updates/%s/request' % args['builds'],
+            {'request': 'revoke', 'csrf_token': self.get_csrf_token()})
+        eq_(resp.json['update']['request'], None)
+        eq_(resp.json['update']['status'], 'testing')
+        publish.assert_called_with(
+                topic='update.request.revoke', msg=mock.ANY)
+
+    @mock.patch(**mock_taskotron_results)
+    @mock.patch(**mock_valid_requirements)
+    @mock.patch('bodhi.notifications.publish')
+    def test_revoke_action_for_testing_request(self, publish, *args):
+        """
+        Test revoke action for testing request on pending update
+        and check status after revoking the request
+        """
+        args = self.get_update('bodhi-2.0.0-3.fc17')
+        resp = self.app.post_json('/updates/', args)
+        up = self.db.query(Update).filter_by(title=resp.json['title']).one()
+        up.status = UpdateStatus.pending
+        up.request = UpdateRequest.testing
+        self.db.flush()
+
+        resp = self.app.post_json(
+            '/updates/%s/request' % args['builds'],
+            {'request': 'revoke', 'csrf_token': self.get_csrf_token()})
+        eq_(resp.json['update']['request'], None)
+        eq_(resp.json['update']['status'], 'unpushed')
+        publish.assert_called_with(
+                topic='update.request.revoke', msg=mock.ANY)
+
+    @mock.patch(**mock_taskotron_results)
+    @mock.patch(**mock_valid_requirements)
+    @mock.patch('bodhi.notifications.publish')
+    def test_request_after_unpush(self, publish, *args):
+        """Test request of this update after unpushing"""
+        args = self.get_update('bodhi-2.0.0-3.fc17')
+        resp = self.app.post_json('/updates/', args)
+        up = self.db.query(Update).filter_by(title=resp.json['title']).one()
+        up.status = UpdateStatus.testing
+        up.request = UpdateRequest.stable
+        self.db.flush()
+
+        resp = self.app.post_json(
+            '/updates/%s/request' % args['builds'],
+            {'request': 'unpush', 'csrf_token': self.get_csrf_token()})
+        eq_(resp.json['update']['request'], None)
+        eq_(resp.json['update']['status'], 'unpushed')
+        publish.assert_called_with(
+                topic='update.request.unpush', msg=mock.ANY)
+
+    @mock.patch(**mock_taskotron_results)
+    @mock.patch(**mock_valid_requirements)
     def test_invalid_stable_request(self, *args):
         """Test submitting a stable request for an update that has yet to meet the stable requirements"""
         Update.get(u'bodhi-2.0-1.fc17', self.db).locked = False
@@ -2439,4 +2505,53 @@ class TestUpdatesService(bodhi.tests.functional.base.BaseWSGICase):
                 status=400)
         eq_(resp.json['status'], 'error')
         eq_(resp.json['errors'][0]['description'],
-            'Cannot submit bodhi-1.0-1.fc17 to stable since it is older than bodhi-2.0-1.fc17')
+            "Cannot submit bodhi ('0', '1.0', '1.fc17') to stable since it is older than ('0', '2.0', '1.fc17')")
+
+    @mock.patch(**mock_valid_requirements)
+    @mock.patch('bodhi.notifications.publish')
+    def test_edit_testing_update_with_build_from_different_update(self, publish, *args):
+        """
+        https://github.com/fedora-infra/bodhi/issues/803
+        """
+        # Create an update with a build that we will try and add to another update
+        nvr1 = u'bodhi-2.0.0-2.fc17'
+        args = self.get_update(nvr1)
+        r = self.app.post_json('/updates/', args)
+        publish.assert_called_with(topic='update.request.testing', msg=ANY)
+        # Mark it as testing
+        upd = Update.get(nvr1, self.db)
+        upd.status = UpdateStatus.testing
+        upd.request = None
+        self.db.flush()
+
+        # Create an update for a different build
+        nvr2 = u'koji-2.0.0-1.fc17'
+        args = self.get_update(nvr2)
+        r = self.app.post_json('/updates/', args)
+        publish.assert_called_with(topic='update.request.testing', msg=ANY)
+        # Mark it as testing
+        upd = Update.get(nvr2, self.db)
+        upd.status = UpdateStatus.testing
+        upd.request = None
+        self.db.flush()
+
+        # Edit the nvr2 update and add nvr1
+        args['edited'] = args['builds']
+        args['builds'] = '%s,%s' % (nvr1, nvr2)
+        r = self.app.post_json('/updates/', args, status=400)
+        up = r.json_body
+        self.assertEquals(up['status'], 'error')
+        self.assertEquals(up['errors'][0]['description'], 'Update for bodhi-2.0.0-2.fc17 already exists')
+
+        up = Update.get(nvr2, self.db)
+        self.assertEquals(up.title, nvr2)  # nvr1 shouldn't be able to be added
+        self.assertEquals(up.status, UpdateStatus.testing)
+        self.assertEquals(len(up.builds), 1)
+        self.assertEquals(up.builds[0].nvr, nvr2)
+
+        # nvr1 update should remain intact
+        up = Update.get(nvr1, self.db)
+        self.assertEquals(up.title, nvr1)
+        self.assertEquals(up.status, UpdateStatus.testing)
+        self.assertEquals(len(up.builds), 1)
+        self.assertEquals(up.builds[0].nvr, nvr1)
