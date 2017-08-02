@@ -46,6 +46,23 @@
       <div class="col-md-5">
         <div class="card card-form">
           <div class="card-header clearfix">
+            <span class="pull-left" data-placement="bottom" data-toggle="tooltip" title="">
+            Release</span>
+          </div>
+          <div class="card-block p-a-0">
+              <div class="form-group">
+                <select class="c-select mb-2 mr-sm-2 mb-sm-0" id="releases-select">
+                  <option value="" selected="true" disabled="disabled" style="display:none;">Choose Release</option>
+                  % for release in releases:
+                    <option value="${release.name}">${release.long_name}</option>
+                  % endfor
+                </select>
+              </div>
+          </div>
+        </div>
+
+        <div class="card card-form">
+          <div class="card-header clearfix">
             <span class="pull-left" data-placement="bottom" data-toggle="tooltip" title="This is a helper field, here only to pre-populate the builds and the bugs lists with relevant options.  You can leave it empty if you like.">
             Packages</span>
           </div>

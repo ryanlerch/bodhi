@@ -26,6 +26,18 @@ $(document).ready(function() {
 
     var messenger = Messenger({theme: 'flat'});
 
+    var base = 'https://apps.fedoraproject.org/packages/fcomm_connector';
+    var prefix = '/bugzilla/query/query_bugs/%7B%22filters%22:%7B%22package%22:%22';
+    var suffix = '%22,%22version%22:%22%22%7D,%22rows_per_page%22:8,%22start_row%22:0%7D';
+    $.ajax({
+        url: base + prefix + 'kernel' + suffix,
+        dataType: "jsonp",
+        success: function(data) {
+            console.log(data);
+        },
+    });
+
+
     // These next couple blocks of code wire up the auto-complete search for
     // packages in the update form.  Two technologies are at play here.  The
     // first is 'bloodhound' which is a suggestion engine.  Its suggestions are
@@ -37,38 +49,48 @@ $(document).ready(function() {
     var prefix = '/xapian/query/search_packages/%7B%22filters%22:%7B%22search%22:%22'
     var suffix = '%22%7D,%22rows_per_page%22:10,%22start_row%22:0%7D'
 
-    var packages = new Bloodhound({
-        datumTokenizer: Bloodhound.tokenizers.obj.whitespace('value'),
-        queryTokenizer: Bloodhound.tokenizers.whitespace,
-        remote: {
-            wildcard: '%QUERY',
-            url: base + prefix + '%QUERY' + suffix,
-            transform: function (response) {
-                return $.map(response.rows, function(row) {
-                    return {'name': $('<p>' + row.name + '</p>').text()}
-                });
-            },
-        }
-    });
-    packages.initialize();
-
-    $('#packages-search .typeahead').typeahead({
-        hint: true,
-        highlight: true,
-        minLength: 1,
+    $( "#releases-select" ).change(function() {
+      var packages = new Bloodhound({
+        datumTokenizer: function (datum) {
+        return Bloodhound.tokenizers.whitespace(datum.nvr);
     },
-    {
-        name: 'packages',
-        displayKey: 'name',
-        source: packages.ttAdapter(),
-        templates: {
-            empty: [
-                '<div class="empty-message">',
-                'unable to find any packages that match the current query',
-                '</div>'
-            ].join('\n'),
-        },
+          queryTokenizer: Bloodhound.tokenizers.whitespace,
+          prefetch: {
+           cache: false,
+           url: 'latest_candidates?release='+$("#releases-select").val(),
+         }
+      });
+      packages.initialize();
+      $('#packages-search .typeahead').typeahead('destroy');
+      $('#packages-search .typeahead').typeahead({
+          hint: true,
+          highlight: true,
+          minLength: 1,
+      },
+      {
+          name: 'packages',
+          limit:200,
+          displayKey: 'nvr',
+          source: packages.ttAdapter(),
+          templates: {
+              suggestion: function(datum) {
+                  return '<p>'+datum.nvr+'</p>';
+              },
+          },
+      });
+      $('#packages-search .typeahead').on('typeahead:selected', function (e, datum) {
+        var checked_candidate_ids = [];
+        $("#candidate-checkboxes input:checkbox:checked").each(function(){
+            checked_candidate_ids.push(parseInt($(this).attr('data-build-id')));
+        });
+        // Insert the checkbox only if this ID is not already listed
+        if ($.inArray(datum.id, checked_candidate_ids) == -1) {
+          add_build_checkbox(datum.nvr, datum.id, false);
+        }
+        $('#packages-search .typeahead').typeahead('val', '');
+      });
     });
+
 
     // candidate_error and bug_error are just two handy utilities for reporting
     // errors when stuff in the code blocks below this goes wrong.
@@ -108,7 +130,7 @@ $(document).ready(function() {
                 '<label>',
                 '<input name="builds" data-build-nvr="' + nvr + '"' +
                     (idx ? '" data-build-id="' + idx + '" ' : ' ') +
-                    'type="checkbox" value="' + nvr + '"' + (checked ? ' checked' : '') + '>',
+                    'type="checkbox" value="' + nvr + '"  checked>',
                 nvr,
                 '</label>',
                 '</div>',
@@ -161,7 +183,7 @@ $(document).ready(function() {
     // from the "add a package" typeahead search box.  When they do that, we
     // fire off two async js calls to get bugs and builds.  Those are then
     // added to their respective checkbox lists once they are retrieved.
-    $('#packages-search input.typeahead').on('typeahead:selected', function (e, datum) {
+    /*$('#packages-search input.typeahead').on('typeahead:selected', function (e, datum) {
         $("#candidate-checkboxes").prepend("<img class='spinner' src='static/img/spinner.gif'>")
         $("#bugs-checkboxes").prepend("<img class='spinner' src='static/img/spinner.gif'>")
         // Get a list of currently checked items
@@ -210,7 +232,7 @@ $(document).ready(function() {
             },
             error: function() {bugs_error(datum.name);},
         });
-    });
+    });*/
 
     // Rig it up so that if the user types in a custom value to the 'builds'
     // field or the 'bugs' field, those things get added to the list of

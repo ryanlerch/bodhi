@@ -235,14 +235,25 @@ def new_update(request):
     Raises:
         pyramid.exceptions.HTTPForbidden: If the user is not logged in.
     """
+    db = request.db
+
     user = request.authenticated_userid
     if not user:
         raise HTTPForbidden("You must be logged in.")
+
+    releases = db.query(models.Release) \
+                 .filter(
+                     models.Release.state.in_(
+                         (models.ReleaseState.pending,
+                         models.ReleaseState.current))) \
+                            .order_by(models.Release.name.desc())
+
     return dict(
         update=None,
         types=reversed(models.UpdateType.values()),
         severities=sorted(models.UpdateSeverity.values(), key=bodhi.server.util.sort_severity),
         suggestions=reversed(models.UpdateSuggestion.values()),
+        releases=releases,
     )
 
 
@@ -265,16 +276,20 @@ def latest_candidates(request):
     koji = request.koji
     db = request.db
 
-    @request.cache.cache_on_arguments()
-    def work(pkg, testing):
+    #@request.cache.cache_on_arguments()
+    def work(pkg, testing, releasename):
         result = []
         koji.multicall = True
 
-        releases = db.query(models.Release) \
-                     .filter(
-                         models.Release.state.in_(
-                             (models.ReleaseState.pending,
-                              models.ReleaseState.current)))
+        if releasename:
+            releases = db.query(models.Release) \
+                         .filter(models.Release.name == releasename)
+        else:
+            releases = db.query(models.Release) \
+                         .filter(
+                             models.Release.state.in_(
+                                 (models.ReleaseState.pending,
+                                  models.ReleaseState.current)))
 
         kwargs = dict(package=pkg, latest=True)
         for release in releases:
@@ -302,12 +317,13 @@ def latest_candidates(request):
 
     pkg = request.params.get('package')
     testing = asbool(request.params.get('testing'))
+    releasename = request.params.get('release')
     log.debug('latest_candidate(%r, %r)' % (pkg, testing))
 
-    if not pkg:
-        return []
+    #if not pkg:
+    #    return [pkg]
 
-    result = work(pkg, testing)
+    result = work(pkg, testing, releasename)
 
     log.debug(result)
     return result
