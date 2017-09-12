@@ -15,6 +15,7 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
 
 <script type="text/javascript">
   $(document).ready(function() {
+    var messenger = Messenger({theme: 'flat'});
     var base_url = '${request.registry.settings["resultsdb_api_url"]}' + '/api/v2.0/';
 
     // Some handy lookups that map taskotron states to bootstrap CSS classes.
@@ -94,7 +95,7 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
         });
     }
 
-    var make_row = function(outcome, testcase, note, arch, time, url, flavor) {
+    var make_row = function(outcome, testcase, note, arch, time, url, flavor, scenario) {
       var icon = '<span data-toggle="tooltip" data-placement="top" ' +
         'title="' + outcome + '" ' +
         'class="fa fa-' + icons[outcome] + ' text-' + classes[outcome] + '">' +
@@ -107,6 +108,11 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
           'class="fa fa-asterisk">' +
           '</span>';
       }
+
+      var rerun = '<span data-toggle="tooltip" data-placement="top" ' +
+        'title="Rerun test"' + 'class="fa fa-refresh rerun-test-button" '+
+        'data-alias="${update.alias}" '+
+        'data-testcase="'+testcase+'" data-scenario="'+scenario+'">' + '</span>';
 
       if (arch != undefined) {
         testcase = testcase + "&nbsp;<span class='label label-default'>"
@@ -128,9 +134,6 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
         note = '';
       }
 
-      var rerun = '<span data-toggle="tooltip" data-placement="top" ' +
-        'title="Rerun test"' + 'class="fa fa-refresh">' + '</span>';
-
       html = '<tr class="row-automatedtests table-' + classes[outcome];
       if (outcome == 'ABSENT') {
           html += ' absent-automatedtest"';
@@ -142,8 +145,11 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
         '<td>' + icon + '</td>' +
         '<td class="nowrap">' + testcase + '</td>' +
         '<td class="stretch-table-column text-xs-right">' + note + '</td>' +
-        '<td class="nowrap">' + age + '</td>' + '<td>' + rerun + '<td/>' +
-        '</tr>';
+        '<td class="nowrap">' + age + '</td>'
+      % if can_edit:
+        html += '<td>' + rerun + '<td/>'
+      % endif
+      html += '</tr>';
       return html;
     };
 
@@ -276,7 +282,8 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
                       result.data.arch,
                       result.submit_time,
                       result.ref_url,
-                      flavor
+                      flavor,
+                      scenario,
                   ));
                 });
               });
@@ -287,7 +294,41 @@ ${update.type} update for ${update.beautify_title(amp=True) | n}
     };
     };
 
+
     var finish = function() {
+      $(".rerun-test-button").click(function(e) {
+        e.stopPropagation();
+        scenario = $(this).data("scenario");
+        testcase = $(this).data("testcase");
+        alias = $(this).data("alias");
+        $(this).addClass("fa-spin");
+        $.ajax({
+            url: "/updates/"+alias+"/rerun_test",
+            data: {
+              test:testcase,
+              scenario:scenario,
+              csrf_token: "${request.session.get_csrf_token()}",
+            },
+            method: 'POST',
+            dataType: 'json',
+            context: this,
+            success: function(response) {
+              console.log(response);
+              $(this).removeClass("fa-spin");
+              msg = messenger.post({
+                message: "Requested rerun of test "+testcase+", scenario "+scenario+" for update "+alias+"",
+                type: "info",
+                hideAfter: false,
+                showCloseButton: true,
+              });
+            },
+            error: function(response) {
+              console.log(response);
+              $(this).removeClass("fa-spin");
+            },
+        });
+      });
+
       // Furthermore, remove the spinners.
       $("#tab-automatedtests .fa-spinner").remove();
       $('#resultsdb .spinner').remove();
