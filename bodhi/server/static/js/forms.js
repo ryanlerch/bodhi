@@ -119,6 +119,16 @@ Form.prototype.data = function() {
         }
     });
 
+    $(this.idx + " select").each(function() {
+        var value = $(this).val();
+        console.log(value)
+        if (value) {
+            data[this.name] = value;
+        } else {
+            value = [];
+        }
+    });
+
     // Flatten things into scalars if we can
     $.each(data, function (key, value) {
         if (value.length == 1) { data[key] = value[0]; }

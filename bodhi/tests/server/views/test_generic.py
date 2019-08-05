@@ -19,7 +19,6 @@
 from datetime import datetime
 from unittest import mock
 import copy
-import re
 
 import webtest
 
@@ -336,21 +335,30 @@ class TestGenericViews(base.BaseTestCase):
     def test_candidate(self):
         res = self.app.get('/latest_candidates')
         body = res.json_body
-        self.assertEqual(body, [])
+        self.assertEqual(len(body), 1)
 
         res = self.app.get('/latest_candidates', {'package': 'TurboGears'})
         body = res.json_body
         self.assertEqual(len(body), 1)
         self.assertEqual(body[0]['nvr'], 'TurboGears-1.0.2.2-3.fc17')
         self.assertEqual(body[0]['id'], 16059)
+        self.assertEqual(body[0]['owner_name'], 'lmacken')
+        self.assertEqual(body[0]['package_name'], 'TurboGears')
+        self.assertEqual(body[0]['release_name'], 'Fedora 17')
 
         res = self.app.get('/latest_candidates', {'package': 'TurboGears', 'testing': True})
         body = res.json_body
         self.assertEqual(len(body), 2)
         self.assertEqual(body[0]['nvr'], 'TurboGears-1.0.2.2-3.fc17')
         self.assertEqual(body[0]['id'], 16059)
+        self.assertEqual(body[0]['owner_name'], 'lmacken')
+        self.assertEqual(body[0]['package_name'], 'TurboGears')
+        self.assertEqual(body[0]['release_name'], 'Fedora 17')
         self.assertEqual(body[1]['nvr'], 'TurboGears-1.0.2.2-4.fc17')
         self.assertEqual(body[1]['id'], 16060)
+        self.assertEqual(body[1]['owner_name'], 'lmacken')
+        self.assertEqual(body[1]['package_name'], 'TurboGears')
+        self.assertEqual(body[1]['release_name'], 'Fedora 17')
 
     def test_version(self):
         res = self.app.get('/api_version')
@@ -385,10 +393,8 @@ class TestGenericViews(base.BaseTestCase):
         res = self.app.get('/updates/new', headers=headers)
         self.assertIn('Creating a new update requires JavaScript', res)
         # Make sure that unspecified comes first, as it should be the default.
-        regex = r''
-        for value in ('unspecified', 'reboot', 'logout'):
-            regex = regex + r'name="suggest" value="{}".*'.format(value)
-        self.assertTrue(re.search(regex, res.body.decode('utf8').replace('\n', ' ')))
+        regex = '<select id="suggest" name="suggest">\\n.*<option value="unspecified"'
+        self.assertRegex(str(res), regex)
 
         # Test that the unlogged in user cannot see the New Update form
         anonymous_settings = copy.copy(self.app_settings)
