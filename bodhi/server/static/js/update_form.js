@@ -31,12 +31,13 @@ $(document).ready(function() {
         labelField: 'nvr',
         searchField: ['nvr', 'tag_name', 'owner_name'],
         preload: true,
+        persist: false,
         plugins: ['remove_button','restore_on_backspace'],
         render: {
             option: function(item, escape) {
                 return '<div class="w-100 border-bottom px-1">' +
                 '   <h6 class="font-weight-bold mb-0">' + escape(item.nvr) + '</h6>' +
-                '   <span class="badge badge-light border"><i class="fa fa-tag"></i> '+escape(item.tag_name)+'</span> '+
+                '   <span class="badge badge-light border"><i class="fa fa-tag"></i> '+escape(item.release_name)+'</span> '+
                 '   <span class="badge badge-light border"><i class="fa fa-user"></i> '+escape(item.owner_name)+'</span> '+
                 '</div>';
             },

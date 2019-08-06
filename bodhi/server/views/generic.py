@@ -305,7 +305,6 @@ def latest_candidates(request):
                     item = {
                         'nvr': build['nvr'],
                         'id': build['id'],
-                        'tag_name': build['tag_name'],
                         'package_name': build['package_name'],
                         'owner_name': build['owner_name'],
                         'release_name': tag_release[build['tag_name']]

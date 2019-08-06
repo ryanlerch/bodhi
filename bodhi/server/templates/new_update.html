@@ -150,7 +150,7 @@ ${update.notes}
               <select name="builds" id="builds-search" multiple='multiple' placeholder="search and add builds">
                   % if update:
                   % for build in update.builds:
-                    <option selected value="${build.nvr}">${build.nvr}</option>
+                  <option selected value="${build.nvr}" data-data='{"nvr": "${build.nvr}", "release_name":"${build.release.long_name}", "id":"${build.get_build_id()}", "package_name":"${build.get_n_v_r()[0]}", "owner_name":"${build.get_owner_name()}"}'>${build.nvr}</option>
                   % endfor
                 % endif
               </select>
