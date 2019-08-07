@@ -31,7 +31,6 @@ $(document).ready(function() {
         labelField: 'nvr',
         searchField: ['nvr', 'tag_name', 'owner_name'],
         preload: true,
-        persist: false,
         plugins: ['remove_button','restore_on_backspace'],
         render: {
             option: function(item, escape) {
@@ -78,19 +77,69 @@ $(document).ready(function() {
 
     $builds_search_selectize = $builds_search_selectize[0].selectize;
 
-    $('#updatetypes').selectize();
-    $('#bugs-search').selectize( {
-        create: true,
+    var $bugs_search_selectize = $('#bugs-search').selectize( {
+        create: function(input, callback){
+            $("#bugs-card .selectize-control").addClass("loading")
+            $.ajax({
+                url: 'https://bugzilla.redhat.com/rest/bug?id=' + encodeURIComponent(input),
+                type: 'GET',
+                dataType: 'jsonp',
+                error: function() {
+                    callback();
+                },
+                success: function(data) {
+                    if (data.bugs.length != 1) {
+                        messenger.post({
+                            message: 'Cannot find data for bug #' + input + '. Either the bug is private or doesn\'t exist.',
+                            type: 'error',
+                        });
+                        $("#bugs-card .selectize-control").removeClass("loading")
+                        callback();
+                    } else {
+                        // Check Bug product
+                        var product = data.bugs[0].product;
+                        if (settings.bz_products.indexOf(product) == -1) {
+                            messenger.post({
+                                message: 'Bug #' + data.bugs[0].id + ' doesn\'t seem to refer to Fedora or Fedora EPEL.\nAre you sure you want to reference it in this update? Bodhi will not be able to operate on this bug!',
+                                type: 'error',
+                            });
+                        }
+                        // Alert user if bug is already closed
+                        if (data.bugs[0].status == "CLOSED") {
+                            messenger.post({
+                                message: 'Bug #' + data.bugs[0].id + ' is already in CLOSED state.\nAre you sure you want to reference it in this update?',
+                                type: 'error',
+                            });
+                        }
+                        callback({'id': data.bugs[0].id, 'summary': data.bugs[0].summary})
+                    }
+                    $("#bugs-card .selectize-control").removeClass("loading")
+                }
+            });
+        },
+        valueField: 'id',
+        labelField: 'id',
         createFilter: "^[0-9]+$",
         plugins: ['remove_button','restore_on_backspace'],
+        onBlur: function(){
+            $('#bugs-search-selectized').attr("placeholder", $bugs_search_selectize.settings.placeholder);
+        },
+        onFocus: function(){
+            $('#bugs-search-selectized').attr("placeholder", "");
+        },
         render: {
             item: function(item, escape) {
-                return '<div>' +
-                '   <span class="name" title="bug description">BZ#' + escape(item.text) + '</span>' +
+                return '<div class="w-100 border-bottom m-0 py-1 pl-3">' +
+                '   <span class="font-weight-bold" title="bug description">BZ#' + escape(item.id) + '</span>' +
+                '   <span class="name" title="bug description">' + escape(item.summary) + '</span>' +
                 '</div>';
             },
         },
     });
+
+    $bugs_search_selectize = $bugs_search_selectize[0].selectize;
+
+    $('#updatetypes').selectize();
     $('#severity').selectize();
     $('#suggest').selectize();
     $('#requirements').selectize({

@@ -160,21 +160,20 @@ ${update.notes}
 
       <div class="col-10 mt-4">
 
-      <div class="card">
+      <div class="card" id="bugs-card">
           <div class="card-header">
               <h5 class="font-weight-bold mb-0">Bugs</h5>
           </div>
-          <div class="card-body">
-            <h6 class="font-weight-bold">Related Bugs</h6>
-            <select id="bugs-search" name="bugs" multiple="multiple">
+          <div class="card-body p-0">
+            <select id="bugs-search" name="bugs" multiple="multiple" placeholder="search and add bugs">
                 % if update:
                 % for bug in update.bugs:
-                <option value="${bug.bug_id}">${bug.title}</option>
+                <option selected value="${bug.bug_id}" data-data='{"id": "${bug.bug_id}", "summary":"${bug.title}"}'>${bug.title}</option>
                 % endfor
               % endif
             </select>
           </div>
-          <div class="card-body pt-0">
+          <div class="card-body">
               <div class="custom-control custom-switch">
                   <input type="checkbox" class="custom-control-input" name="close_bugs" id="close_bugs" class="form-check-input" data-singleton="true"
                   % if update and update.close_bugs:

@@ -303,16 +303,25 @@ padding-bottom: 2em;
 
 /*CSS rules for the builds adder on the add/edit update form*/
 
-#builds-card .selectize-input{
+#builds-card .selectize-input,
+#bugs-card .selectize-input{
+
     border:none;
     padding: 0;
 }
 
-#builds-card .selectize-input.focus{
+#bugs-card .selectize-input{
+
+    border-bottom:1px solid #ddd;;
+}
+
+#builds-card .selectize-input.focus,
+#bugs-card .selectize-input.focus{
     box-shadow:none;
 }
 
-#builds-card .selectize-input #builds-search-selectized{
+#builds-card .selectize-input #builds-search-selectized,
+#bugs-card .selectize-input #bugs-search-selectized{
     width:100%!important;
     border-radius: 0.25rem !important;
     min-height:34px!important;
@@ -322,7 +331,8 @@ padding-bottom: 2em;
     text-indent: 3em!important;
 }
 
-#builds-card .selectize-input:before{
+#builds-card .selectize-input:before,
+#bugs-card .selectize-input:before{
     /*show the magnifying glass to the left of the builds search*/
     content: "\f002"!important;
     position: absolute;
@@ -338,7 +348,8 @@ padding-bottom: 2em;
     left: 15px;
 }
 
-#builds-card .loading .selectize-input:after{
+#builds-card .loading .selectize-input:after,
+#bugs-card .loading .selectize-input:after{
     /*show the loading animation on the builds chooser*/
     content: "\f1ce"!important;
     position: absolute;
@@ -356,17 +367,20 @@ padding-bottom: 2em;
     animation: fa-spin 2s infinite linear;
 }
 
-#builds-card .selectize-control.multi .selectize-input > div
+#builds-card .selectize-control.multi .selectize-input > div,
+#bugs-card .selectize-control.multi .selectize-input > div
 {
     background-color: white; 428bca
 }
 
-#builds-card .selectize-control.multi .selectize-input > div.active
+#builds-card .selectize-control.multi .selectize-input > div.active,
+#bugs-card .selectize-control.multi .selectize-input > div.active
 {
     background-color: #428bca;
 }
 
-#builds-card  .selectize-control.plugin-remove_button [data-value] .remove{
+#builds-card  .selectize-control.plugin-remove_button [data-value] .remove,
+#bugs-card  .selectize-control.plugin-remove_button [data-value] .remove{
     font-size:16px;
     padding-top:4px;
 }
